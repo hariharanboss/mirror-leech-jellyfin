@@ -38,11 +38,7 @@ services:
       dockerfile: Dockerfile
     container_name: aibbot
     restart: unless-stopped
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
-    depends_on:
-      - telegram-bot-api
+    network_mode: "host"
     env_file:
       - .env
     environment:
