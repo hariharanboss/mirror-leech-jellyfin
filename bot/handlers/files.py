@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 import time
@@ -48,6 +49,7 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         filename = caption_clean
     else:
         filename = sanitize_filename(raw_name)
+
     mime_type = getattr(media_obj, "mime_type", "") or ""
 
     # Choose destination based on type
@@ -57,7 +59,7 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     target_filepath = os.path.join(dest_dir, filename)
 
     status_msg = await message.reply_text(
-        f"📥 <i>Downloading {filename} ({get_readable_file_size(media_obj.file_size)}) from Telegram...</i>",
+        f"📥 <i>Initiating transfer for {filename} ({get_readable_file_size(media_obj.file_size)})...</i>",
         parse_mode=ParseMode.HTML
     )
     start_time = time.time()
@@ -70,15 +72,83 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         message=status_msg
     )
 
+    total_size = media_obj.file_size
+    done_event = asyncio.Event()
+
+    async def poll_local_api_progress():
+        while not done_event.is_set():
+            await asyncio.sleep(2.0)
+            if done_event.is_set() or task.is_cancelled:
+                break
+
+            current_size = 0
+            api_dir = "/var/lib/telegram-bot-api"
+            if os.path.exists(api_dir):
+                try:
+                    latest_mtime = 0
+                    latest_file = None
+                    for root, _, files in os.walk(api_dir):
+                        for f in files:
+                            fp = os.path.join(root, f)
+                            try:
+                                m = os.path.getmtime(fp)
+                                if m > latest_mtime and m >= start_time - 10:
+                                    latest_mtime = m
+                                    latest_file = fp
+                            except Exception:
+                                pass
+                    if latest_file and os.path.exists(latest_file):
+                        current_size = os.path.getsize(latest_file)
+                except Exception:
+                    pass
+
+            now = time.time()
+            speed = current_size / (now - start_time) if (now - start_time) > 0 else 0
+            status_text = build_status_message(
+                name=filename,
+                status="Receiving",
+                downloaded_bytes=current_size,
+                total_bytes=total_size,
+                speed=speed,
+                start_time=start_time,
+                engine="Local-Bot-API",
+                task_id=task.task_id,
+                user_name=user.first_name,
+                user_id=user.id
+            )
+            await task_manager.safe_edit_status(task, status_text)
+
+    monitor_task = asyncio.create_task(poll_local_api_progress())
+
     try:
-        # Pass 30-minute timeout so the local API has ample time to download large files over cellular/hotspot
+        # 30-minute timeout for large files over local API
         tg_file = await media_obj.get_file(read_timeout=1800, write_timeout=1800)
+        done_event.set()
+        monitor_task.cancel()
         file_path = tg_file.file_path
+
+        if task.is_cancelled:
+            await status_msg.edit_text("❌ <b>Transfer Cancelled by User.</b>", parse_mode=ParseMode.HTML)
+            return
 
         # Case 1: Local Telegram Bot API returned a local disk path
         if file_path and os.path.exists(file_path):
             logger.info(f"Local Telegram Bot API direct path detected: {file_path}")
-            await status_msg.edit_text("📂 <i>Zero-copy transfer to Jellyfin library...</i>", parse_mode=ParseMode.HTML)
+
+            # Show moving state
+            moving_text = build_status_message(
+                name=filename,
+                status="Moving to Jellyfin",
+                downloaded_bytes=total_size or os.path.getsize(file_path),
+                total_bytes=total_size or os.path.getsize(file_path),
+                speed=0,
+                start_time=start_time,
+                engine="Local-Bot-API",
+                task_id=task.task_id,
+                user_name=user.first_name,
+                user_id=user.id
+            )
+            await task_manager.safe_edit_status(task, moving_text, force=True)
 
             # Avoid file overwrites
             if os.path.exists(target_filepath):
@@ -103,7 +173,6 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             return
 
         # Case 2: Fallback streaming download with progress bar
-        total_size = media_obj.file_size
         temp_dest = os.path.join(dest_dir, f".tmp_{task.task_id}_{filename}")
         task.temp_filepath = temp_dest
 
@@ -128,8 +197,8 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
         await tg_file.download_to_drive(
             custom_path=temp_dest,
-            read_timeout=300,
-            write_timeout=300
+            read_timeout=1800,
+            write_timeout=1800
         )
 
         if task.is_cancelled:
@@ -137,7 +206,6 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             await status_msg.edit_text("❌ <b>Transfer Cancelled.</b>", parse_mode=ParseMode.HTML)
             return
 
-        # Move temp to final
         if os.path.exists(target_filepath):
             base, ext = os.path.splitext(filename)
             target_filepath = os.path.join(dest_dir, f"{base}_{int(time.time())}{ext}")
@@ -162,4 +230,7 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         if not task.is_cancelled:
             await status_msg.edit_text(f"❌ <b>File Transfer Error:</b> <code>{e}</code>", parse_mode=ParseMode.HTML)
     finally:
+        done_event.set()
+        if not monitor_task.done():
+            monitor_task.cancel()
         await task_manager.unregister_task(task.task_id)

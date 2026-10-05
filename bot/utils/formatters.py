@@ -47,6 +47,7 @@ def build_status_message(
     total_bytes: Optional[int],
     speed: float,
     start_time: float,
+    engine: str = "Direct-Stream",
     task_id: str = "",
     user_name: str = "User",
     user_id: int = 0
