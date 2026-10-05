@@ -47,7 +47,10 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     os.makedirs(dest_dir, exist_ok=True)
     target_filepath = os.path.join(dest_dir, filename)
 
-    status_msg = await message.reply_text("📥 <i>Acquiring Telegram file handle...</i>", parse_mode=ParseMode.HTML)
+    status_msg = await message.reply_text(
+        f"📥 <i>Downloading {filename} ({get_readable_file_size(media_obj.file_size)}) from Telegram...</i>",
+        parse_mode=ParseMode.HTML
+    )
     start_time = time.time()
 
     task = await task_manager.register_task(
@@ -59,7 +62,8 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
     try:
-        tg_file = await media_obj.get_file()
+        # Pass 30-minute timeout so the local API has ample time to download large files over cellular/hotspot
+        tg_file = await media_obj.get_file(read_timeout=1800, write_timeout=1800)
         file_path = tg_file.file_path
 
         # Case 1: Local Telegram Bot API returned a local disk path

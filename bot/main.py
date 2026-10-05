@@ -23,7 +23,18 @@ def create_application() -> Application:
         logger.critical("BOT_TOKEN is not set! Exiting.")
         sys.exit(1)
 
-    builder = Application.builder().token(BOT_TOKEN)
+    from telegram.request import HTTPXRequest
+
+    # Set generous timeouts (30 minutes) to allow the Local Bot API to download large files (up to 2GB)
+    request_pool = HTTPXRequest(
+        connection_pool_size=16,
+        read_timeout=1800.0,
+        write_timeout=1800.0,
+        connect_timeout=60.0,
+        pool_timeout=60.0
+    )
+
+    builder = Application.builder().token(BOT_TOKEN).request(request_pool)
 
     # Configure Local Telegram Bot API if configured
     if BOT_API_URL and "api.telegram.org" not in BOT_API_URL:
