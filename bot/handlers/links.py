@@ -67,12 +67,20 @@ async def link_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         keyboard = [
             [
-                InlineKeyboardButton("🎬 1080p", callback_data=f"start_ytdl:1080:{link_token}"),
-                InlineKeyboardButton("🎬 720p", callback_data=f"start_ytdl:720:{link_token}")
+                InlineKeyboardButton("🌟 Best Video", callback_data=f"start_ytdl:best:{link_token}"),
+                InlineKeyboardButton("🎵 Best MP3", callback_data=f"start_ytdl:mp3:{link_token}")
             ],
             [
-                InlineKeyboardButton("🎬 480p", callback_data=f"start_ytdl:480:{link_token}"),
-                InlineKeyboardButton("🎵 MP3", callback_data=f"start_ytdl:mp3:{link_token}")
+                InlineKeyboardButton("🎬 4K (2160p)", callback_data=f"start_ytdl:2160:{link_token}"),
+                InlineKeyboardButton("🎬 2K (1440p)", callback_data=f"start_ytdl:1440:{link_token}")
+            ],
+            [
+                InlineKeyboardButton("🎬 1080p (FHD)", callback_data=f"start_ytdl:1080:{link_token}"),
+                InlineKeyboardButton("🎬 720p (HD)", callback_data=f"start_ytdl:720:{link_token}")
+            ],
+            [
+                InlineKeyboardButton("🎬 480p (SD)", callback_data=f"start_ytdl:480:{link_token}"),
+                InlineKeyboardButton("🎬 360p", callback_data=f"start_ytdl:360:{link_token}")
             ],
             [InlineKeyboardButton("❌ Cancel", callback_data=f"dismiss:{link_token}")]
         ]

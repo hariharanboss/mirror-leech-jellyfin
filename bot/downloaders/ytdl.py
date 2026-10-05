@@ -38,21 +38,45 @@ def parse_size_to_bytes(amount_str: str, unit_str: str) -> int:
         return 0
 
 QUALITY_MAP = {
+    "best": {
+        "format": "bestvideo+bestaudio/best",
+        "audio_only": False,
+        "label": "Best Available"
+    },
+    "2160": {
+        "format": "bestvideo[height<=2160]+bestaudio/best[height<=2160]/best",
+        "audio_only": False,
+        "label": "4K (2160p)"
+    },
+    "1440": {
+        "format": "bestvideo[height<=1440]+bestaudio/best[height<=1440]/best",
+        "audio_only": False,
+        "label": "2K (1440p)"
+    },
     "1080": {
         "format": "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
-        "audio_only": False
+        "audio_only": False,
+        "label": "1080p (FHD)"
     },
     "720": {
         "format": "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
-        "audio_only": False
+        "audio_only": False,
+        "label": "720p (HD)"
     },
     "480": {
         "format": "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
-        "audio_only": False
+        "audio_only": False,
+        "label": "480p (SD)"
+    },
+    "360": {
+        "format": "bestvideo[height<=360]+bestaudio/best[height<=360]/best",
+        "audio_only": False,
+        "label": "360p"
     },
     "mp3": {
         "format": "bestaudio/best",
-        "audio_only": True
+        "audio_only": True,
+        "label": "MP3 Audio"
     }
 }
 
@@ -108,6 +132,10 @@ async def run_ytdl_download(url: str, quality_key: str, task: DownloadTask):
             line = line_bytes.decode("utf-8", errors="replace").strip()
             if not line:
                 continue
+
+            if line.startswith("[download] Destination:"):
+                dest_file = line.replace("[download] Destination:", "").strip()
+                task.name = os.path.basename(dest_file)
 
             match = YTDL_PROGRESS_REGEX.search(line)
             if match:

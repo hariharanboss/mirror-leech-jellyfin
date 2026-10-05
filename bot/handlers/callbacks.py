@@ -55,6 +55,18 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             message=query.message
         )
 
+        # Immediately clear quality/download buttons and show initialization state with Cancel button
+        cancel_markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_task:{task.task_id}")
+        ]])
+        await query.message.edit_text(
+            f"⏳ <b>Initializing direct stream...</b>\n"
+            f"<b>File:</b> <code>{filename}</code>\n"
+            f"<i>Connecting to remote host...</i>",
+            reply_markup=cancel_markup,
+            parse_mode=ParseMode.HTML
+        )
+
         # Launch async task in background
         asyncio.create_task(run_direct_download(url=url, filename=filename, task=task))
         return
@@ -81,6 +93,17 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             user_name=user.first_name,
             engine="yt-dlp",
             message=query.message
+        )
+
+        # Immediately clear quality selection buttons and show extraction state with Cancel button
+        cancel_markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_task:{task.task_id}")
+        ]])
+        await query.message.edit_text(
+            f"⏳ <b>Initializing {quality.upper()} download...</b>\n"
+            f"<i>Extracting YouTube stream & formats...</i>",
+            reply_markup=cancel_markup,
+            parse_mode=ParseMode.HTML
         )
 
         # Launch async task in background
