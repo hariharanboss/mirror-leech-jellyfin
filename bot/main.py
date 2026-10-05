@@ -37,14 +37,15 @@ def create_application() -> Application:
 
     builder = Application.builder().token(BOT_TOKEN).request(request_pool)
 
-    # Configure Local Telegram Bot API if configured
+    # Configure Bot API endpoint (Local Docker API or Cloudflare Reverse Proxy)
     if BOT_API_URL and "api.telegram.org" not in BOT_API_URL:
-        logger.info(f"Connecting to Local Telegram Bot API at: {BOT_API_URL}")
+        is_local_server = any(h in BOT_API_URL for h in ("telegram-bot-api", "localhost", "127.0.0.1"))
+        logger.info(f"Connecting to Bot API at: {BOT_API_URL} (local_mode={is_local_server})")
         builder = (
             builder
             .base_url(f"{BOT_API_URL}/bot")
             .base_file_url(f"{BOT_API_URL}/file/bot")
-            .local_mode(True)
+            .local_mode(is_local_server)
         )
     else:
         logger.info("Using standard Telegram Cloud API")
