@@ -1,9 +1,22 @@
+import socket
 import sys
+
+# Force IPv4 resolution to bypass broken IPv6 routing on college / enterprise networks
+_orig_getaddrinfo = socket.getaddrinfo
+
+def _getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
+    if family == socket.AF_UNSPEC:
+        family = socket.AF_INET
+    return _orig_getaddrinfo(host, port, family, type, proto, flags)
+
+socket.getaddrinfo = _getaddrinfo_ipv4
+
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
+    ContextTypes,
     filters
 )
 from bot.config import BOT_TOKEN, BOT_API_URL
@@ -19,6 +32,10 @@ from bot.handlers.links import link_message_handler
 from bot.handlers.files import file_message_handler
 from bot.handlers.callbacks import callback_query_handler
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log errors caused by network drops or unhandled exceptions."""
+    logger.error(f"Uncaught exception while processing update: {context.error}")
+
 def create_application() -> Application:
     if not BOT_TOKEN:
         logger.critical("BOT_TOKEN is not set! Exiting.")
@@ -26,13 +43,14 @@ def create_application() -> Application:
 
     from telegram.request import HTTPXRequest
 
-    # Set generous timeouts (30 minutes) to allow the Local Bot API to download large files (up to 2GB)
+    # Set generous timeouts (30 minutes) and HTTP/1.1 for rock-solid stability
     request_pool = HTTPXRequest(
         connection_pool_size=16,
         read_timeout=1800.0,
         write_timeout=1800.0,
         connect_timeout=60.0,
-        pool_timeout=60.0
+        pool_timeout=60.0,
+        http_version="1.1"
     )
 
     builder = Application.builder().token(BOT_TOKEN).request(request_pool)
@@ -74,6 +92,9 @@ def create_application() -> Application:
 
     # Register Callback Query Handlers (Buttons)
     app.add_handler(CallbackQueryHandler(callback_query_handler))
+
+    # Register Global Error Handler
+    app.add_error_handler(error_handler)
 
     return app
 

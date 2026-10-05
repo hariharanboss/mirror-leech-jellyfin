@@ -3,7 +3,7 @@ import shutil
 import time
 import httpx
 from telegram.constants import ParseMode
-from bot.config import MOVIES_DIR, MUSIC_DIR
+from bot.config import MOVIES_DIR, MUSIC_DIR, BOT_API_URL
 from bot.core.task_manager import task_manager, DownloadTask
 from bot.utils.formatters import (
     build_status_message,
@@ -33,13 +33,19 @@ async def run_direct_download(url: str, filename: str, task: DownloadTask):
     total_bytes = None
     start_time = task.start_time
 
+    # If URL points to Telegram file server and custom Bot API proxy is configured, rewrite host
+    download_url = url
+    if BOT_API_URL and "api.telegram.org" in download_url:
+        download_url = download_url.replace("https://api.telegram.org", BOT_API_URL.rstrip("/"))
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=None, headers=headers) as client:
-            async with client.stream("GET", url) as resp:
+        transport = httpx.AsyncHTTPTransport(retries=3)
+        async with httpx.AsyncClient(transport=transport, follow_redirects=True, timeout=None, headers=headers) as client:
+            async with client.stream("GET", download_url) as resp:
                 if resp.status_code >= 400:
                     await task.message.edit_text(
                         f"❌ <b>Download Failed:</b> HTTP {resp.status_code} ({resp.reason_phrase})",
@@ -102,11 +108,18 @@ async def run_direct_download(url: str, filename: str, task: DownloadTask):
             )
             logger.info(f"Direct download completed: {final_filepath} ({size_str})")
 
+    except httpx.HTTPError as e:
+        logger.error(f"Direct download network error on task {task.task_id}: {e}")
+        if not task.is_cancelled:
+            await task.message.edit_text(
+                f"❌ <b>Download Failed (Network Error):</b>\n<code>{type(e).__name__}: {str(e)}</code>",
+                parse_mode=ParseMode.HTML
+            )
     except Exception as e:
         logger.error(f"Direct download error on task {task.task_id}: {e}", exc_info=True)
         if not task.is_cancelled:
             await task.message.edit_text(
-                f"❌ <b>Download Error:</b> <code>{str(e)}</code>",
+                f"❌ <b>Download Error:</b>\n<code>{str(e)}</code>",
                 parse_mode=ParseMode.HTML
             )
     finally:
