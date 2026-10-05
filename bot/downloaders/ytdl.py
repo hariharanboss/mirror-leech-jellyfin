@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import time
+from typing import Optional
 from telegram.constants import ParseMode
 from bot.config import MOVIES_DIR, MUSIC_DIR
 from bot.core.task_manager import task_manager, DownloadTask
@@ -80,7 +81,7 @@ QUALITY_MAP = {
     }
 }
 
-async def run_ytdl_download(url: str, quality_key: str, task: DownloadTask):
+async def run_ytdl_download(url: str, quality_key: str, task: DownloadTask, custom_name: Optional[str] = None):
     """
     Spawns yt-dlp as an async subprocess with process group isolation,
     parses real-time stdout progress, and renders live MLTB status.
@@ -90,7 +91,10 @@ async def run_ytdl_download(url: str, quality_key: str, task: DownloadTask):
     dest_dir = MUSIC_DIR if is_audio else MOVIES_DIR
     os.makedirs(dest_dir, exist_ok=True)
 
-    output_template = os.path.join(dest_dir, "%(title)s [%(id)s].%(ext)s")
+    if custom_name:
+        output_template = os.path.join(dest_dir, f"{custom_name}.%(ext)s")
+    else:
+        output_template = os.path.join(dest_dir, "%(title)s [%(id)s].%(ext)s")
 
     cmd = [
         "yt-dlp",
@@ -157,6 +161,7 @@ async def run_ytdl_download(url: str, quality_key: str, task: DownloadTask):
                     speed=speed_bytes,
                     start_time=start_time,
                     engine="yt-dlp",
+                    task_id=task.task_id,
                     user_name=task.user_name,
                     user_id=task.user_id
                 )

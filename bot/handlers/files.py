@@ -38,7 +38,16 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             raw_name = f"file_{int(time.time())}.bin"
 
-    filename = sanitize_filename(raw_name)
+    # Support custom filename via Telegram message caption
+    if message.caption and message.caption.strip():
+        caption_clean = sanitize_filename(message.caption.strip())
+        orig_base, orig_ext = os.path.splitext(raw_name)
+        cap_base, cap_ext = os.path.splitext(caption_clean)
+        if not cap_ext and orig_ext:
+            caption_clean = f"{caption_clean}{orig_ext}"
+        filename = caption_clean
+    else:
+        filename = sanitize_filename(raw_name)
     mime_type = getattr(media_obj, "mime_type", "") or ""
 
     # Choose destination based on type
@@ -111,6 +120,7 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 speed=speed,
                 start_time=start_time,
                 engine="Local-API-Stream",
+                task_id=task.task_id,
                 user_name=user.first_name,
                 user_id=user.id
             )

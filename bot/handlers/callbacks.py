@@ -36,7 +36,20 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             await query.answer("Task not found or already completed.", show_alert=True)
         return
 
-    # 3. Start Direct Download
+    # 3. Rename requested
+    if data.startswith("rename:"):
+        token = data.split(":", 1)[1]
+        if token in pending_links:
+            context.user_data["waiting_rename_token"] = token
+            await query.message.reply_text(
+                "✏️ <b>Send the new filename for this download:</b>",
+                parse_mode=ParseMode.HTML
+            )
+        else:
+            await query.answer("Link session expired. Please resend the URL.", show_alert=True)
+        return
+
+    # 4. Start Direct Download
     if data.startswith("start_direct:"):
         token = data.split(":", 1)[1]
         link_info = pending_links.pop(token, None)
@@ -44,7 +57,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             await query.message.edit_text("⚠️ <i>Link session expired. Please resend the URL.</i>", parse_mode=ParseMode.HTML)
             return
 
-        filename = link_info.get("filename") or "downloaded_stream"
+        filename = link_info.get("custom_name") or link_info.get("filename") or "downloaded_stream"
         url = link_info["url"]
 
         task = await task_manager.register_task(
@@ -55,15 +68,13 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             message=query.message
         )
 
-        # Immediately clear quality/download buttons and show initialization state with Cancel button
-        cancel_markup = InlineKeyboardMarkup([[
-            InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_task:{task.task_id}")
-        ]])
+        # Immediately clear quality/download buttons and show initialization state with Cancel command instruction
         await query.message.edit_text(
             f"⏳ <b>Initializing direct stream...</b>\n"
             f"<b>File:</b> <code>{filename}</code>\n"
+            f"<b>Task ID:</b> <code>{task.task_id}</code>\n"
             f"<i>Connecting to remote host...</i>",
-            reply_markup=cancel_markup,
+            reply_markup=None,
             parse_mode=ParseMode.HTML
         )
 
@@ -71,7 +82,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         asyncio.create_task(run_direct_download(url=url, filename=filename, task=task))
         return
 
-    # 4. Start yt-dlp Media Download
+    # 5. Start yt-dlp Media Download
     if data.startswith("start_ytdl:"):
         parts = data.split(":")
         if len(parts) < 3:
@@ -85,7 +96,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         url = link_info["url"]
-        task_name = f"Media [{quality.upper()}]"
+        custom_name = link_info.get("custom_name")
+        task_name = custom_name or link_info.get("filename") or f"Media [{quality.upper()}]"
 
         task = await task_manager.register_task(
             name=task_name,
@@ -95,17 +107,16 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             message=query.message
         )
 
-        # Immediately clear quality selection buttons and show extraction state with Cancel button
-        cancel_markup = InlineKeyboardMarkup([[
-            InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_task:{task.task_id}")
-        ]])
+        # Immediately clear quality selection buttons and show extraction state with Cancel command instruction
         await query.message.edit_text(
             f"⏳ <b>Initializing {quality.upper()} download...</b>\n"
+            f"<b>Title:</b> <code>{task_name}</code>\n"
+            f"<b>Task ID:</b> <code>{task.task_id}</code>\n"
             f"<i>Extracting YouTube stream & formats...</i>",
-            reply_markup=cancel_markup,
+            reply_markup=None,
             parse_mode=ParseMode.HTML
         )
 
         # Launch async task in background
-        asyncio.create_task(run_ytdl_download(url=url, quality_key=quality, task=task))
+        asyncio.create_task(run_ytdl_download(url=url, quality_key=quality, task=task, custom_name=custom_name))
         return

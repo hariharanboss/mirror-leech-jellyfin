@@ -47,7 +47,7 @@ def build_status_message(
     total_bytes: Optional[int],
     speed: float,
     start_time: float,
-    engine: str = "Direct-Stream",
+    task_id: str = "",
     user_name: str = "User",
     user_id: int = 0
 ) -> str:
@@ -77,7 +77,7 @@ def build_status_message(
 
     speed_str = f"{get_readable_file_size(speed)}/s"
 
-    return (
+    msg = (
         f"<b>{name}</b>\n"
         f"<b>┌ </b><b>Status:</b> <i>{status}</i>\n"
         f"<b>├ </b><b>{p_bar}</b> {percent_str}\n"
@@ -85,5 +85,14 @@ def build_status_message(
         f"<b>├ </b><b>Speed:</b> {speed_str} | <b>ETA:</b> {eta_str}\n"
         f"<b>├ </b><b>Elapsed:</b> {elapsed_str}\n"
         f"<b>├ </b><b>Engine:</b> {engine}\n"
-        f"<b>└ </b><b>User:</b> <a href=\"tg://user?id={user_id}\">{user_name}</a> | <b>ID:</b> <code>{user_id}</code>"
     )
+
+    if task_id:
+        msg += (
+            f"<b>├ </b><b>Task ID:</b> <code>{task_id}</code>\n"
+            f"<b>└ </b><b>To Cancel:</b> <code>/cancel {task_id}</code>"
+        )
+    else:
+        msg += f"<b>└ </b><b>User:</b> <a href=\"tg://user?id={user_id}\">{user_name}</a> | <b>ID:</b> <code>{user_id}</code>"
+
+    return msg

@@ -46,17 +46,23 @@ class DownloadTask:
 class TaskManager:
     def __init__(self):
         self._tasks: Dict[str, DownloadTask] = {}
+        self._msg_map: Dict[tuple, str] = {}
         self._lock = asyncio.Lock()
 
     async def register_task(self, name: str, user_id: int, user_name: str, engine: str, message: Message) -> DownloadTask:
         async with self._lock:
             task = DownloadTask(name, user_id, user_name, engine, message)
             self._tasks[task.task_id] = task
+            self._msg_map[(message.chat_id, message.message_id)] = task.task_id
             return task
 
     async def get_task(self, task_id: str) -> Optional[DownloadTask]:
         async with self._lock:
             return self._tasks.get(task_id)
+
+    async def get_all_tasks(self) -> Dict[str, DownloadTask]:
+        async with self._lock:
+            return dict(self._tasks)
 
     async def cancel_task(self, task_id: str) -> bool:
         async with self._lock:
@@ -66,9 +72,30 @@ class TaskManager:
                 return True
             return False
 
+    async def cancel_by_message(self, chat_id: int, message_id: int) -> Optional[str]:
+        async with self._lock:
+            task_id = self._msg_map.get((chat_id, message_id))
+            if task_id and task_id in self._tasks:
+                task = self._tasks[task_id]
+                if not task.is_cancelled:
+                    task.cancel()
+                    return task_id
+            return None
+
+    async def cancel_all(self) -> int:
+        async with self._lock:
+            count = 0
+            for task in self._tasks.values():
+                if not task.is_cancelled:
+                    task.cancel()
+                    count += 1
+            return count
+
     async def unregister_task(self, task_id: str):
         async with self._lock:
-            self._tasks.pop(task_id, None)
+            task = self._tasks.pop(task_id, None)
+            if task and task.message:
+                self._msg_map.pop((task.message.chat_id, task.message.message_id), None)
 
     async def safe_edit_status(
         self,
@@ -84,14 +111,10 @@ class TaskManager:
         if not force and (now - task.last_update_time < min_interval):
             return
 
-        cancel_markup = InlineKeyboardMarkup([[
-            InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_task:{task.task_id}")
-        ]])
-
         try:
             await task.message.edit_text(
                 text,
-                reply_markup=cancel_markup,
+                reply_markup=None,
                 parse_mode=ParseMode.HTML
             )
             task.last_update_time = now

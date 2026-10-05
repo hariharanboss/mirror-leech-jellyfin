@@ -12,7 +12,8 @@ from bot.handlers.commands import (
     start_command,
     help_command,
     stats_command,
-    ping_command
+    ping_command,
+    cancel_command
 )
 from bot.handlers.links import link_message_handler
 from bot.handlers.files import file_message_handler
@@ -56,6 +57,7 @@ def create_application() -> Application:
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("server", stats_command))
     app.add_handler(CommandHandler("ping", ping_command))
+    app.add_handler(CommandHandler("cancel", cancel_command))
 
     # Register Link Detection Handler
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, link_message_handler))

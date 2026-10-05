@@ -73,6 +73,7 @@ async def run_direct_download(url: str, filename: str, task: DownloadTask):
                             speed=speed,
                             start_time=start_time,
                             engine=task.engine,
+                            task_id=task.task_id,
                             user_name=task.user_name,
                             user_id=task.user_id
                         )
