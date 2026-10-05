@@ -1,0 +1,151 @@
+import os
+import shutil
+import time
+from telegram import Update
+from telegram.constants import ParseMode
+from telegram.ext import ContextTypes
+from bot.config import is_user_authorized, MOVIES_DIR, MUSIC_DIR
+from bot.core.task_manager import task_manager
+from bot.utils.formatters import (
+    get_readable_file_size,
+    get_readable_time,
+    sanitize_filename,
+    build_status_message
+)
+from bot.logger import logger
+
+AUDIO_MIME_TYPES = ("audio/", "voice/")
+
+async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not is_user_authorized(user.id):
+        return
+
+    message = update.message
+    # Determine which file type was uploaded
+    media_obj = message.document or message.video or message.audio or message.voice
+    if not media_obj:
+        return
+
+    # Extract or infer filename
+    raw_name = getattr(media_obj, "file_name", None)
+    if not raw_name:
+        mime = getattr(media_obj, "mime_type", "")
+        if "audio" in mime or message.voice:
+            raw_name = f"audio_{int(time.time())}.mp3"
+        elif "video" in mime or message.video:
+            raw_name = f"video_{int(time.time())}.mp4"
+        else:
+            raw_name = f"file_{int(time.time())}.bin"
+
+    filename = sanitize_filename(raw_name)
+    mime_type = getattr(media_obj, "mime_type", "") or ""
+
+    # Choose destination based on type
+    is_audio = message.audio or message.voice or any(mime_type.startswith(p) for p in AUDIO_MIME_TYPES)
+    dest_dir = MUSIC_DIR if is_audio else MOVIES_DIR
+    os.makedirs(dest_dir, exist_ok=True)
+    target_filepath = os.path.join(dest_dir, filename)
+
+    status_msg = await message.reply_text("📥 <i>Acquiring Telegram file handle...</i>", parse_mode=ParseMode.HTML)
+    start_time = time.time()
+
+    task = await task_manager.register_task(
+        name=filename,
+        user_id=user.id,
+        user_name=user.first_name,
+        engine="Local-Bot-API",
+        message=status_msg
+    )
+
+    try:
+        tg_file = await media_obj.get_file()
+        file_path = tg_file.file_path
+
+        # Case 1: Local Telegram Bot API returned a local disk path
+        if file_path and os.path.exists(file_path):
+            logger.info(f"Local Telegram Bot API direct path detected: {file_path}")
+            await status_msg.edit_text("📂 <i>Zero-copy transfer to Jellyfin library...</i>", parse_mode=ParseMode.HTML)
+
+            # Avoid file overwrites
+            if os.path.exists(target_filepath):
+                base, ext = os.path.splitext(filename)
+                target_filepath = os.path.join(dest_dir, f"{base}_{int(time.time())}{ext}")
+
+            # Instant move on the same filesystem
+            shutil.move(file_path, target_filepath)
+
+            file_size = os.path.getsize(target_filepath)
+            elapsed_str = get_readable_time(int(time.time() - start_time))
+
+            await status_msg.edit_text(
+                f"✅ <b>File Ingested into Jellyfin!</b>\n\n"
+                f"<b>┌ Name:</b> <code>{os.path.basename(target_filepath)}</code>\n"
+                f"<b>├ Size:</b> {get_readable_file_size(file_size)}\n"
+                f"<b>├ Time:</b> {elapsed_str}\n"
+                f"<b>├ Engine:</b> <code>Zero-Copy Local API</code>\n"
+                f"<b>└ Saved to:</b> <code>{target_filepath}</code>",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        # Case 2: Fallback streaming download with progress bar
+        total_size = media_obj.file_size
+        temp_dest = os.path.join(dest_dir, f".tmp_{task.task_id}_{filename}")
+        task.temp_filepath = temp_dest
+
+        async def progress_hook(current, total):
+            if task.is_cancelled:
+                return
+            now = time.time()
+            speed = current / (now - start_time) if (now - start_time) > 0 else 0
+            text = build_status_message(
+                name=filename,
+                status="Receiving",
+                downloaded_bytes=current,
+                total_bytes=total or total_size,
+                speed=speed,
+                start_time=start_time,
+                engine="Local-API-Stream",
+                user_name=user.first_name,
+                user_id=user.id
+            )
+            await task_manager.safe_edit_status(task, text)
+
+        await tg_file.download_to_drive(
+            custom_path=temp_dest,
+            read_timeout=300,
+            write_timeout=300
+        )
+
+        if task.is_cancelled:
+            task.cancel()
+            await status_msg.edit_text("❌ <b>Transfer Cancelled.</b>", parse_mode=ParseMode.HTML)
+            return
+
+        # Move temp to final
+        if os.path.exists(target_filepath):
+            base, ext = os.path.splitext(filename)
+            target_filepath = os.path.join(dest_dir, f"{base}_{int(time.time())}{ext}")
+
+        shutil.move(temp_dest, target_filepath)
+        task.temp_filepath = None
+
+        elapsed_str = get_readable_time(int(time.time() - start_time))
+        final_size = os.path.getsize(target_filepath)
+
+        await status_msg.edit_text(
+            f"✅ <b>Saved to Server!</b>\n\n"
+            f"<b>┌ Name:</b> <code>{os.path.basename(target_filepath)}</code>\n"
+            f"<b>├ Size:</b> {get_readable_file_size(final_size)}\n"
+            f"<b>├ Time:</b> {elapsed_str}\n"
+            f"<b>└ Saved to:</b> <code>{target_filepath}</code>",
+            parse_mode=ParseMode.HTML
+        )
+
+    except Exception as e:
+        logger.error(f"Error handling Telegram file: {e}", exc_info=True)
+        if not task.is_cancelled:
+            await status_msg.edit_text(f"❌ <b>File Transfer Error:</b> <code>{e}</code>", parse_mode=ParseMode.HTML)
+    finally:
+        await task_manager.unregister_task(task.task_id)

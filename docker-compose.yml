@@ -1,0 +1,60 @@
+services:
+  # 1. Jellyfin Media Server
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    network_mode: "host"
+    volumes:
+      - ./config/jellyfin:/config
+      - ./cache/jellyfin:/cache
+      - ./movies:/movies
+      - ./music:/music
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Asia/Kolkata
+
+  # 2. Local Telegram Bot API Server (supports large file downloads/uploads up to 2GB)
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    container_name: telegram-bot-api
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      TELEGRAM_LOCAL: "1"
+      TELEGRAM_STAT: "1"
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+    ports:
+      - "8081:8081"
+      - "8082:8082"
+
+  # 3. Media Telegram Bot (AIBBOT)
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aibbot
+    restart: unless-stopped
+    depends_on:
+      - telegram-bot-api
+    env_file:
+      - .env
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - BOT_API_URL=http://telegram-bot-api:8081
+      - MOVIES_DIR=/movies
+      - MUSIC_DIR=/music
+    volumes:
+      # Shared with telegram-bot-api for instant zero-copy local file moving
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+      # Jellyfin media folders
+      - ./movies:/movies
+      - ./music:/music
+      # Host stats access for accurate server stats
+      - /etc/os-release:/etc/os-release:ro
+
+volumes:
+  telegram-bot-api-data:
