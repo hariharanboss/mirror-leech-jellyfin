@@ -101,6 +101,8 @@ async def run_ytdl_download(url: str, quality_key: str, task: DownloadTask, cust
         "--newline",
         "--no-playlist",
         "--progress",
+        "--concurrent-fragments", "8",
+        "--buffer-size", "1M",
         "--format", cfg["format"],
         "-o", output_template,
     ]

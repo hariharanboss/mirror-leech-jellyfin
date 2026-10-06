@@ -228,7 +228,16 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logger.error(f"Error handling Telegram file: {e}", exc_info=True)
         if not task.is_cancelled:
-            await status_msg.edit_text(f"❌ <b>File Transfer Error:</b> <code>{e}</code>", parse_mode=ParseMode.HTML)
+            err_str = str(e)
+            if "File is too big" in err_str:
+                msg = (
+                    "❌ <b>File is too big for Cloud API (>20MB)</b>\n\n"
+                    "Telegram's standard Cloud API limits bot file downloads to <b>20 MB</b>.\n"
+                    "To ingest files up to <b>2,000 MB (2 GB)</b>, the bot must be connected to the <b>Local Telegram Bot API Server</b> (<code>http://127.0.0.1:8081</code>) running with <code>local_mode=True</code>."
+                )
+            else:
+                msg = f"❌ <b>File Transfer Error:</b> <code>{err_str}</code>"
+            await status_msg.edit_text(msg, parse_mode=ParseMode.HTML)
     finally:
         done_event.set()
         if not monitor_task.done():
