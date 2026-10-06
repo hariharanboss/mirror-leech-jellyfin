@@ -1,7 +1,8 @@
 import socket
+import ssl
 import sys
 
-# Force IPv4 resolution to bypass broken IPv6 routing on college / enterprise networks
+# 1. Force IPv4 resolution to bypass broken IPv6 routing on college / enterprise networks
 _orig_getaddrinfo = socket.getaddrinfo
 
 def _getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
@@ -10,6 +11,23 @@ def _getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
     return _orig_getaddrinfo(host, port, family, type, proto, flags)
 
 socket.getaddrinfo = _getaddrinfo_ipv4
+
+# 2. Relax strict SSL/TLS validation flags (VERIFY_X509_STRICT, legacy renegotiation)
+# preventing httpcore.ConnectError caused by enterprise firewall inspection / CDN edge renegotiation
+_orig_create_default_context = ssl.create_default_context
+
+def _relaxed_create_default_context(*args, **kwargs):
+    ctx = _orig_create_default_context(*args, **kwargs)
+    if hasattr(ssl, "VERIFY_X509_STRICT"):
+        ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    if hasattr(ssl, "VERIFY_X509_PARTIAL_CHAIN"):
+        ctx.verify_flags &= ~ssl.VERIFY_X509_PARTIAL_CHAIN
+    if hasattr(ssl, "OP_LEGACY_SERVER_CONNECT"):
+        ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT
+    return ctx
+
+ssl.create_default_context = _relaxed_create_default_context
+
 
 from telegram.ext import (
     Application,
@@ -102,7 +120,7 @@ def main():
     logger.info("Starting Telegram Media Bot...")
     app = create_application()
     logger.info("Bot application built successfully. Listening for updates...")
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling(drop_pending_updates=True, bootstrap_retries=10)
 
 if __name__ == "__main__":
     main()
