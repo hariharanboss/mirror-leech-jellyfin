@@ -4,7 +4,7 @@ import shutil
 import time
 import httpx
 from telegram.constants import ParseMode
-from bot.config import MOVIES_DIR, MUSIC_DIR, BOT_API_URL
+from bot.config import MOVIES_DIR, MUSIC_DIR, BOT_API_URL, JELLYFIN_URL
 from bot.core.task_manager import task_manager, DownloadTask
 from bot.utils.formatters import (
     build_status_message,
@@ -200,12 +200,20 @@ async def run_direct_download(url: str, filename: str, task: DownloadTask):
             final_size = os.path.getsize(final_filepath)
             size_str = get_readable_file_size(final_size)
 
+            reply_markup = None
+            if JELLYFIN_URL:
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                reply_markup = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🍿 Open in Jellyfin", url=JELLYFIN_URL)]
+                ])
+
             await task.message.edit_text(
                 f"✅ <b>Download Completed!</b>\n\n"
                 f"<b>┌ Name:</b> <code>{os.path.basename(final_filepath)}</code>\n"
                 f"<b>├ Size:</b> {size_str}\n"
                 f"<b>├ Time:</b> {elapsed_str}\n"
                 f"<b>└ Saved to:</b> <code>{final_filepath}</code>",
+                reply_markup=reply_markup,
                 parse_mode=ParseMode.HTML
             )
             logger.info(f"Direct download completed: {final_filepath} ({size_str})")

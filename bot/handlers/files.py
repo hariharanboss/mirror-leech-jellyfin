@@ -5,7 +5,7 @@ import time
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
-from bot.config import is_user_authorized, MOVIES_DIR, MUSIC_DIR
+from bot.config import is_user_authorized, MOVIES_DIR, MUSIC_DIR, JELLYFIN_URL
 from bot.core.task_manager import task_manager
 from bot.utils.formatters import (
     get_readable_file_size,
@@ -216,12 +216,20 @@ async def file_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         elapsed_str = get_readable_time(int(time.time() - start_time))
         final_size = os.path.getsize(target_filepath)
 
+        reply_markup = None
+        if JELLYFIN_URL:
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            reply_markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🍿 Open in Jellyfin", url=JELLYFIN_URL)]
+            ])
+
         await status_msg.edit_text(
             f"✅ <b>Saved to Server!</b>\n\n"
             f"<b>┌ Name:</b> <code>{os.path.basename(target_filepath)}</code>\n"
             f"<b>├ Size:</b> {get_readable_file_size(final_size)}\n"
             f"<b>├ Time:</b> {elapsed_str}\n"
             f"<b>└ Saved to:</b> <code>{target_filepath}</code>",
+            reply_markup=reply_markup,
             parse_mode=ParseMode.HTML
         )
 

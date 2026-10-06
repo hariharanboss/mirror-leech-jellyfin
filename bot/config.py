@@ -16,6 +16,9 @@ BOT_API_URL = os.getenv("BOT_API_URL", "http://telegram-bot-api:8081").strip().r
 MOVIES_DIR = os.getenv("MOVIES_DIR", "/movies").strip()
 MUSIC_DIR = os.getenv("MUSIC_DIR", "/music").strip()
 
+# Optional public Jellyfin URL (e.g. ngrok or domain) for stream buttons
+JELLYFIN_URL = os.getenv("JELLYFIN_URL", "").strip().rstrip("/")
+
 # Create directories if they do not exist
 os.makedirs(MOVIES_DIR, exist_ok=True)
 os.makedirs(MUSIC_DIR, exist_ok=True)

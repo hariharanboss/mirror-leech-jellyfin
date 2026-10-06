@@ -4,7 +4,7 @@ import re
 import time
 from typing import Optional
 from telegram.constants import ParseMode
-from bot.config import MOVIES_DIR, MUSIC_DIR
+from bot.config import MOVIES_DIR, MUSIC_DIR, JELLYFIN_URL
 from bot.core.task_manager import task_manager, DownloadTask
 from bot.utils.formatters import (
     build_status_message,
@@ -188,6 +188,13 @@ async def run_ytdl_download(url: str, quality_key: str, task: DownloadTask, cust
             elapsed_str = get_readable_time(int(time.time() - start_time))
             size_str = get_readable_file_size(total_bytes) if total_bytes else "Complete"
 
+            reply_markup = None
+            if JELLYFIN_URL:
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                reply_markup = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🍿 Open in Jellyfin", url=JELLYFIN_URL)]
+                ])
+
             await task.message.edit_text(
                 f"✅ <b>Download Completed!</b>\n\n"
                 f"<b>┌ Name:</b> <code>{task.name}</code>\n"
@@ -195,6 +202,7 @@ async def run_ytdl_download(url: str, quality_key: str, task: DownloadTask, cust
                 f"<b>├ Size:</b> {size_str}\n"
                 f"<b>├ Time:</b> {elapsed_str}\n"
                 f"<b>└ Saved to:</b> <code>{dest_dir}</code>",
+                reply_markup=reply_markup,
                 parse_mode=ParseMode.HTML
             )
         else:

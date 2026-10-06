@@ -46,6 +46,7 @@ services:
       - BOT_API_URL=${BOT_API_URL:-http://127.0.0.1:8081}
       - MOVIES_DIR=/movies
       - MUSIC_DIR=/music
+      - JELLYFIN_URL=${JELLYFIN_URL:-}
     volumes:
       # Shared with telegram-bot-api for instant zero-copy local file moving
       - telegram-bot-api-data:/var/lib/telegram-bot-api
