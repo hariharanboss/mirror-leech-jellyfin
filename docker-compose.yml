@@ -43,7 +43,7 @@ services:
       - .env
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
-      - BOT_API_URL=${BOT_API_URL:-http://telegram-bot-api:8081}
+      - BOT_API_URL=${BOT_API_URL:-http://127.0.0.1:8081}
       - MOVIES_DIR=/movies
       - MUSIC_DIR=/music
     volumes:
